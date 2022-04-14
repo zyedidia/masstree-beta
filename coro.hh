@@ -56,7 +56,7 @@ struct schedule_awaitable {
     void await_resume() {}
 };
 
-auto schedule() {
+static inline auto schedule() {
     return schedule_awaitable{};
 }
 
@@ -154,7 +154,7 @@ struct task_awaiter {
     coro_handle_type coro_handle;
 };
 
-task_awaiter coro_task::operator co_await() {
+inline task_awaiter coro_task::operator co_await() {
     return task_awaiter{this->coro_handle};
 }
 
@@ -181,7 +181,7 @@ struct throttler {
     ~throttler() { run(); }
 };
 
-void coro_task::promise_type::return_void() {
+inline void coro_task::promise_type::return_void() {
     if (owner) {
         owner->on_task_done();
     }
