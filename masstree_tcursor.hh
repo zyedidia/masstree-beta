@@ -18,6 +18,7 @@
 #include "small_vector.hh"
 #include "masstree_key.hh"
 #include "masstree_struct.hh"
+#include "coro.hh"
 namespace Masstree {
 template <typename P> struct gc_layer_rcu_callback;
 
@@ -60,7 +61,7 @@ class unlocked_tcursor {
           lv_(leafvalue<P>::make_empty()), root_(table.fix_root()) {
     }
 
-    bool find_unlocked(threadinfo& ti);
+    coro_task find_unlocked(threadinfo& ti, bool* result);
 
     inline value_type value() const {
         return lv_.value();

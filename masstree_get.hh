@@ -17,10 +17,11 @@
 #define MASSTREE_GET_HH
 #include "masstree_tcursor.hh"
 #include "masstree_key.hh"
+#include "coro.hh"
 namespace Masstree {
 
 template <typename P>
-bool unlocked_tcursor<P>::find_unlocked(threadinfo& ti)
+coro_task unlocked_tcursor<P>::find_unlocked(threadinfo& ti, bool* result)
 {
     int match;
     key_indexed_position kx;
@@ -52,19 +53,23 @@ bool unlocked_tcursor<P>::find_unlocked(threadinfo& ti)
         ka_.shift_by(-match);
         root = lv_.layer();
         goto retry;
-    } else
-        return match;
+    } else {
+        *result = match;
+        co_return;
+    }
 }
 
 template <typename P>
-inline bool basic_table<P>::get(Str key, value_type &value,
-                                threadinfo& ti) const
+inline coro_task basic_table<P>::get(Str key, value_type &value,
+                                threadinfo& ti, bool* result) const
 {
     unlocked_tcursor<P> lp(*this, key);
-    bool found = lp.find_unlocked(ti);
+    bool found;
+    co_await lp.find_unlocked(ti, &found);
     if (found)
         value = lp.value();
-    return found;
+    *result = found;
+    co_return;
 }
 
 template <typename P>

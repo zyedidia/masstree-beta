@@ -19,6 +19,7 @@
 #include "kvproto.hh"
 #include "log.hh"
 #include "json.hh"
+#include "coro.hh"
 #include <algorithm>
 
 #if MASSTREE_ROW_TYPE_ARRAY
@@ -52,7 +53,7 @@ class query {
     template <typename T>
     void run_get(T& table, Json& req, threadinfo& ti);
     template <typename T>
-    bool run_get1(T& table, Str key, int col, Str& value, threadinfo& ti);
+    coro_task run_get1(T& table, Str key, int col, Str& value, threadinfo& ti, bool* result);
 
     template <typename T>
     result_t run_put(T& table, Str key,
@@ -138,14 +139,16 @@ void query<R>::run_get(T& table, Json& req, threadinfo& ti) {
 }
 
 template <typename R> template <typename T>
-bool query<R>::run_get1(T& table, Str key, int col, Str& value, threadinfo& ti) {
+coro_task query<R>::run_get1(T& table, Str key, int col, Str& value, threadinfo& ti, bool* result) {
     typename T::unlocked_cursor_type lp(table, key);
-    bool found = lp.find_unlocked(ti);
+    bool found;
+    co_await lp.find_unlocked(ti, &found);
     if (found && row_is_marker(lp.value()))
         found = false;
     if (found)
         value = lp.value()->col(col);
-    return found;
+    *result = found;
+    co_return;
 }
 
 
