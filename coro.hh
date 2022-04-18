@@ -86,7 +86,7 @@ struct coro_task {
             struct final_awaiter {
                 promise_type& me;
 
-                bool await_ready() noexcept { return false; }
+                bool await_ready() noexcept { return !me.continuation; }
 
                 void await_suspend(coro_handle_type) noexcept {
                     if (me.continuation) {
