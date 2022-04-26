@@ -378,11 +378,12 @@ void kvtest_client::fail(const char *fmt, ...) {
     always_assert(0);
 }
 
+static const char alphanum[] =
+    "0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz";
+
 std::string gen_random(int len) {
-    static const char alphanum[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
     std::string tmp_s;
     tmp_s.reserve(len);
 
@@ -403,32 +404,36 @@ int main() {
     kvtest_client client("mtbasic");
     client.set_thread(main_ti);
 
-    const int dataset_size = 10000000;
+    const int dataset_size = 1000000;
     const int len = 100;
-    std::vector<Str> dataset(dataset_size);
+    std::vector<std::string> dataset(dataset_size);
 
     printf("making dataset...\n");
 
     for (int i = 0; i < dataset_size; i++) {
-        dataset.push_back(Str(gen_random(len)));
+        auto s = gen_random(len);
+        dataset[i] = s;
     }
 
     printf("making masstree...\n");
 
     for (auto& str : dataset) {
-        client.put(str, str);
+        auto lcdfstr = Str(str);
+        client.put(lcdfstr, lcdfstr);
     }
 
     const int nlookups = 1000000;
-    std::vector<Str> lookups(nlookups);
+    std::vector<std::string> lookups(nlookups);
     for (int i = 0; i < nlookups; i++) {
-        lookups.push_back(dataset[rand() % dataset.size()]);
+        auto str = dataset[rand() % dataset.size()];
+        lookups[i] = str;
     }
 
     std::chrono::steady_clock::time_point tstart = std::chrono::steady_clock::now();
 
-    throttler t{20};
+    throttler t{8};
     for (auto& lookup : lookups) {
+        auto l = Str(lookup);
         t.spawn(client.get_check(lookup, lookup));
     }
     t.run();
