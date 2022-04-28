@@ -28,7 +28,7 @@ coro_task unlocked_tcursor<P>::find_unlocked(threadinfo& ti, bool* result)
     node_base<P>* root = const_cast<node_base<P>*>(root_);
 
  retry:
-    n_ = root->reach_leaf(ka_, v_, ti);
+    co_await root->reach_leaf(ka_, v_, &n_, ti);
 
  forward:
     if (v_.deleted())

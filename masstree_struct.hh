@@ -20,6 +20,7 @@
 #include "stringbag.hh"
 #include "mtcounters.hh"
 #include "timestamp.hh"
+#include "coro.hh"
 namespace Masstree {
 
 template <typename P>
@@ -85,8 +86,10 @@ class node_base : public make_nodeversion<P>::type {
         return parent_exists(x) ? x : const_cast<base_type*>(this);
     }
 
-    inline leaf_type* reach_leaf(const key_type& k, nodeversion_type& version,
-                                 threadinfo& ti) const;
+    inline coro_task reach_leaf(const key_type& k, nodeversion_type& version,
+                                 leaf_type** result, threadinfo& ti) const;
+
+    inline leaf_type* reach_leaf(const key_type& k, nodeversion_type& version, threadinfo& ti) const;
 
     void prefetch_full() const {
         for (int i = 0; i < std::min(16 * std::min(P::leaf_width, P::internode_width) + 1, 4 * 64); i += 64)
@@ -625,10 +628,6 @@ leaf<P>::stable_last_key_compare(const key_type& k, nodeversion_type v,
     }
 }
 
-
-/** @brief Return the leaf in this tree layer responsible for @a ka.
-
-    Returns a stable leaf. Sets @a version to the stable version. */
 template <typename P>
 inline leaf<P>* node_base<P>::reach_leaf(const key_type& ka,
                                          nodeversion_type& version,
@@ -682,6 +681,68 @@ inline leaf<P>* node_base<P>::reach_leaf(const key_type& ka,
 
     version = v[sense];
     return const_cast<leaf<P> *>(static_cast<const leaf<P> *>(n[sense]));
+}
+
+
+/** @brief Return the leaf in this tree layer responsible for @a ka.
+
+    Returns a stable leaf. Sets @a version to the stable version. */
+template <typename P>
+inline coro_task node_base<P>::reach_leaf(const key_type& ka,
+                                         nodeversion_type& version,
+                                         leaf<P>** result,
+                                         threadinfo& ti) const
+{
+    const node_base<P> *n[2];
+    typename node_base<P>::nodeversion_type v[2];
+    unsigned sense;
+
+    // Get a non-stale root.
+    // Detect staleness by checking whether n has ever split.
+    // The true root has never split.
+ retry:
+    sense = 0;
+    n[sense] = this;
+    while (true) {
+        v[sense] = n[sense]->stable_annotated(ti.stable_fence());
+        if (v[sense].is_root()) {
+            break;
+        }
+        ti.mark(tc_root_retry);
+        n[sense] = n[sense]->maybe_parent();
+    }
+
+    // Loop over internal nodes.
+    while (!v[sense].isleaf()) {
+        const internode<P> *in = static_cast<const internode<P>*>(n[sense]);
+        in->prefetch();
+        co_await schedule();
+        int kp = internode<P>::bound_type::upper(ka, *in);
+        n[sense ^ 1] = in->child_[kp];
+        if (!n[sense ^ 1]) {
+            goto retry;
+        }
+        v[sense ^ 1] = n[sense ^ 1]->stable_annotated(ti.stable_fence());
+
+        if (likely(!in->has_changed(v[sense]))) {
+            sense ^= 1;
+            continue;
+        }
+
+        typename node_base<P>::nodeversion_type oldv = v[sense];
+        v[sense] = in->stable_annotated(ti.stable_fence());
+        if (unlikely(oldv.has_split(v[sense]))
+            && in->stable_last_key_compare(ka, v[sense], ti) > 0) {
+            ti.mark(tc_root_retry);
+            goto retry;
+        } else {
+            ti.mark(tc_internode_retry);
+        }
+    }
+
+    version = v[sense];
+    *result = const_cast<leaf<P> *>(static_cast<const leaf<P> *>(n[sense]));
+    co_return;
 }
 
 /** @brief Return the leaf at or after *this responsible for @a ka.
