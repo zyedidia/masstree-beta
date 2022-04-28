@@ -417,23 +417,21 @@ int main() {
 
     printf("making masstree...\n");
 
-    for (auto& str : dataset) {
-        auto lcdfstr = Str(str);
+    for (const std::string& str : dataset) {
+        Str lcdfstr = Str(str);
         client.put(lcdfstr, lcdfstr);
     }
 
     const int nlookups = 1000000;
-    std::vector<std::string> lookups(nlookups);
+    std::vector<Str> lookups(nlookups);
     for (int i = 0; i < nlookups; i++) {
-        auto str = dataset[rand() % dataset.size()];
-        lookups[i] = str;
+        lookups[i] = dataset[rand() % dataset.size()];
     }
 
     std::chrono::steady_clock::time_point tstart = std::chrono::steady_clock::now();
 
     throttler t{8};
-    for (auto& lookup : lookups) {
-        auto l = Str(lookup);
+    for (Str& lookup : lookups) {
         t.spawn(client.get_check(lookup, lookup));
     }
     t.run();
