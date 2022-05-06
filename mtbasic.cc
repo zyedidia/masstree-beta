@@ -430,7 +430,7 @@ int main() {
 
     std::chrono::steady_clock::time_point tstart = std::chrono::steady_clock::now();
 
-    throttler t{8};
+    throttler t{64};
     for (Str& lookup : lookups) {
         t.spawn(client.get_check(lookup, lookup));
     }

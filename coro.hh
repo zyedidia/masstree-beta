@@ -88,10 +88,11 @@ struct coro_task {
 
                 bool await_ready() noexcept { return !me.continuation; }
 
-                void await_suspend(coro_handle_type) noexcept {
+                std::coroutine_handle<> await_suspend(coro_handle_type) noexcept {
                     if (me.continuation) {
-                        me.continuation.resume();
+                        return me.continuation;
                     }
+                    return std::noop_coroutine();
                 }
 
                 void await_resume() noexcept {}
@@ -145,7 +146,7 @@ struct task_awaiter {
 
     auto await_suspend(coro_handle_type awaiting_coro_) {
         coro_handle.promise().continuation = awaiting_coro_;
-        coro_handle.resume();
+        return coro_handle;
     }
 
     void await_resume() {}
